@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.idea/
+.vscode/
+.git/
+.gitignore
+.DS_Store
+*.adoc
+*.md
+shell/
+old/
+*.7z
+*.tar.gz

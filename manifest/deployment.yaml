@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-web
+  template:
+    metadata:
+      labels:
+        app: python-web
+    spec:
+      containers:
+        - name: python-web
+          image: python-web/python-web:1.21.11
+          ports:
+            - containerPort: 8080
+          volumeMounts: [ ]
+      volumes: [ ]
