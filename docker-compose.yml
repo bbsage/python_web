@@ -4,5 +4,6 @@ services:
   python_web:
     container_name: python_web
     build: .
+    image: localhost:32000/python_web:latest
     ports:
       - "8080:8080"
