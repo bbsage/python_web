@@ -1,0 +1,133 @@
+pipeline {
+  agent {
+    kubernetes {
+      label 'python-and-jnlp'
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: python
+    image: python:3.12-slim
+    command: ["sleep"]
+    args: ["1d"]
+  - name: docker
+    image: docker:24.0-dind
+    securityContext:
+      privileged: true
+    command: ["dockerd-entrypoint.sh"]
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["cat"]
+    tty: true
+  - name: kaniko-with-tools
+    image: localhost:32000/kaniko-with-tools:latest
+    command: ["sleep"]
+    args: ["1d"]
+    volumeMounts:
+      - name: kaniko-secret
+        mountPath: /kaniko/.docker
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: docker-config
+"""
+    }
+  }
+
+  environment {
+    VENV_DIR = '.venv'
+    IMAGE_NAME = 'localhost:32000/python-web:latest'
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+          checkout([
+            $class: 'GitSCM',
+            branches: [[name: 'refs/heads/dev']],
+            userRemoteConfigs: [[
+              url: 'https://github.com/bbsage/python_web.git',
+              credentialsId: 'github-bbsage' // 如果有使用私有 repo 需要
+            ]]
+          ])
+      }
+    }
+
+    stage('Setup Python Env') {
+      steps {
+        container('python') {
+          sh """
+            python3 -m venv ${VENV_DIR}
+            . ${VENV_DIR}/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements-dev.txt
+          """
+        }
+      }
+    }
+
+    stage('Lint') {
+      steps {
+        container('python') {
+          sh """
+            . ${VENV_DIR}/bin/activate
+            black --check .
+            mypy .
+          """
+        }
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        container('python') {
+          sh """
+            . ${VENV_DIR}/bin/activate
+            pytest --junitxml=report.xml
+          """
+        }
+      }
+    }
+
+    stage('Build and Push') {
+      steps {
+        container('kaniko-with-tools') {
+          sh '''
+            /kaniko/executor \
+              --dockerfile=Dockerfile \
+              --context=`pwd` \
+              --destination=${IMAGE_NAME} \
+              --insecure \
+              --insecure-push
+          '''
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        container('kubectl') {
+          sh """
+            kubectl create namespace demo
+            kubectl create deployment python-web --image=python-web:latest -n demo
+            kubectl create deployment python-web --image=nginx:latest -n demo
+            kubectl expose deployment/python-web --port 8080 -n demo
+          """
+        }
+      }
+    }
+
+    stage('Post Deploy Test') {
+      steps {
+        container('kubectl') {
+          sh """
+            kubectl rollout status deployment/python-web -n demo
+            curl -f http://python-web.demo.svc.cluster.local || exit 1
+          """
+        }
+      }
+    }
+  }
+}
