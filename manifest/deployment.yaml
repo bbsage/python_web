@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: python-web
-          image: python-web/python-web:1.21.11
+          image: localhost:32000/python_web:latest
           ports:
             - containerPort: 8080
           volumeMounts: [ ]
